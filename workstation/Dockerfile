@@ -31,7 +31,7 @@ RUN npx tsc -p . && npm prune --omit=dev
 FROM base
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      xvfb x11vnc novnc python3-websockify supervisor fluxbox \
+      xvfb x11vnc novnc python3-websockify supervisor \
       fonts-dejavu fonts-liberation fonts-noto-color-emoji \
       ca-certificates curl wget git jq unzip zip python3 python3-pip python3-venv \
       procps less nano libnss3-tools \
@@ -45,6 +45,7 @@ COPY --from=build /src/package.json /opt/toold/package.json
 COPY workstation/supervisord.conf /etc/supervisor/conf.d/crew.conf
 COPY workstation/entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY workstation/start-chromium.sh /usr/local/bin/start-chromium.sh
+COPY workstation/crew-view.html /usr/share/novnc/crew-view.html
 RUN chmod +x /usr/local/bin/*.sh && ln -sf /usr/share/novnc/vnc.html /usr/share/novnc/index.html
 ENV DISPLAY=:99 \
     SCREEN_WIDTH=1280 SCREEN_HEIGHT=800 \

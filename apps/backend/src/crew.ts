@@ -99,9 +99,12 @@ export function textOf(content: Block[]) {
     .join("\n");
 }
 
-/** @mentions (by slug or name) that match bots. */
+/** @mentions (by slug or name) that match bots. Mentions inside code blocks/inline code don't count. */
 export function mentionedBots(text: string, bots: BotRow[]) {
-  const lower = text.toLowerCase();
+  const lower = text
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`[^`]*`/g, " ")
+    .toLowerCase();
   return bots.filter((b) => {
     const handles = [b.slug.toLowerCase(), b.name.toLowerCase().replace(/\s+/g, "")];
     return handles.some((h) => new RegExp(`(^|[^\\w])@${h.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\w-])`, "i").test(lower));
@@ -144,7 +147,10 @@ export async function dispatchUserMessage(threadId: string, text: string) {
 export async function dispatchMentions(run: RunRow, text: string) {
   if (!text || run.depth >= config.maxBotChainDepth) return;
   const all = await getBots();
-  const targets = mentionedBots(text, all).filter((b) => b.id !== run.bot_id);
+  // Teammates this run already handed work to (via delegate) have been woken up – don't ping them twice.
+  const notes = await sql<{ content: Block[] }[]>`select content from messages where run_id = ${run.id} and role = 'note'`;
+  const delegated = new Set(notes.flatMap((n) => mentionedBots(textOf(n.content), all).map((b) => b.id)));
+  const targets = mentionedBots(text, all).filter((b) => b.id !== run.bot_id && !delegated.has(b.id));
   for (const bot of targets) {
     await addBotToThread(run.thread_id, bot.id);
     await ensureRun({ threadId: run.thread_id, botId: bot.id, trigger: "delegation", parentRunId: run.id, depth: run.depth + 1 });

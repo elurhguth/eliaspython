@@ -12,6 +12,7 @@ import type { ChatRequest, ChatResult, LlmMessage, Provider, ToolCall } from "./
  *   "sök efter X"                   -> web search
  *   "skicka …"                      -> a risky click (asks for approval)
  *   "logga in …"                    -> secure handoff
+ *   "lämna över till nils: kör ls"  -> delegate to a teammate
  */
 
 function lastUserText(messages: LlmMessage[]): { text: string; index: number } {
@@ -29,13 +30,18 @@ function lastUserText(messages: LlmMessage[]): { text: string; index: number } {
 }
 
 function plan(text: string): Omit<ToolCall, "id">[] {
-  const t = text.replace(/^\[[^\]]+\]:\s*/, "").trim();
+  const t = text.replace(/^\[[^\]]+\]:\s*/, "").replace(/^@[\w-]+\s+/, "").trim();
   const lower = t.toLowerCase();
   const calls: Omit<ToolCall, "id">[] = [];
   const url = t.match(/https?:\/\/[^\s)]+|\b[a-z0-9-]+(\.[a-z0-9-]+)*\.(com|se|org|net|io|dev|ai|nu)\b[^\s)]*/i)?.[0];
   if (/logga in|log in|sign in|bankid/.test(lower)) {
     if (url) calls.push({ name: "browser_navigate", input: { url } });
     calls.push({ name: "request_takeover", input: { reason: "Inloggning krävs – logga in själv och lämna sedan tillbaka datorn." } });
+    return calls;
+  }
+  const handover = t.match(/(?:lämna över till|delegera till|hand over to)\s+@?([\w-]+)\s*:?\s*([\s\S]+)/i);
+  if (handover) {
+    calls.push({ name: "delegate", input: { bot: handover[1].toLowerCase(), message: handover[2].trim() } });
     return calls;
   }
   if (/^(kör|run|\$)\s+/i.test(t)) {

@@ -4,6 +4,7 @@ import { classifyShell, classifyText } from "./agent/policy.js";
 import { buildHistory } from "./agent/history.js";
 import { resolveLogical, slugifyName } from "./memory.js";
 import { mentionedBots } from "./crew.js";
+import { isPrivateAddress } from "./agent/web.js";
 import type { BotRow, MessageRow } from "./types.js";
 
 const bot = (id: string, name: string, slug = name.toLowerCase()): BotRow =>
@@ -64,6 +65,7 @@ describe("mentions", () => {
     expect(mentionedBots("@nils kan du kolla?", team).map((b) => b.id)).toEqual(["2"]);
     expect(mentionedBots("Hej @Vera och @siri!", team).map((b) => b.id).sort()).toEqual(["1", "3"]);
     expect(mentionedBots("mejla anna@nils.se", team)).toEqual([]);
+    expect(mentionedBots("se ```\növerlämnad till @nils\n``` och `@siri`", team)).toEqual([]);
   });
 });
 
@@ -120,5 +122,13 @@ describe("history building", () => {
     const h = buildHistory(messages, vera, byId, false);
     const images = h.flatMap((m) => m.content).filter((b: any) => b.type === "tool_result" && b.image);
     expect(images).toHaveLength(3);
+  });
+});
+
+describe("ssrf guard", () => {
+  it("blocks internal and metadata addresses", () => {
+    for (const ip of ["127.0.0.1", "10.1.2.3", "172.18.0.4", "192.168.1.10", "169.254.169.254", "100.64.0.1", "::1", "fd00::1", "::ffff:127.0.0.1", "0.0.0.0"])
+      expect(isPrivateAddress(ip), ip).toBe(true);
+    for (const ip of ["1.1.1.1", "140.82.121.4", "2606:4700::1111"]) expect(isPrivateAddress(ip), ip).toBe(false);
   });
 });

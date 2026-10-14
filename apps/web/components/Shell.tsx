@@ -141,7 +141,7 @@ function Sidebar() {
                 </Link>
                 <button
                   onClick={() => setEditing(b)}
-                  className="absolute right-2 top-1/2 hidden -translate-y-1/2 rounded-lg p-1.5 text-muted hover:bg-raise hover:text-ink group-hover:block"
+                  className="absolute right-2 top-1/2 block -translate-y-1/2 rounded-lg p-1.5 text-muted hover:bg-raise hover:text-ink md:hidden md:group-hover:block"
                   aria-label={`Redigera ${b.name}`}
                 >
                   <Settings size={14} />

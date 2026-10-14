@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Archive, Monitor, MoreHorizontal, Pencil, Trash2, UserPlus } from "lucide-react";
+import { Archive, MessageSquarePlus, Monitor, MoreHorizontal, Pencil, Settings2, Trash2, UserPlus } from "lucide-react";
 import { api } from "@/lib/api";
 import { useCrew, useCrewEvent } from "@/lib/store";
 import { cx } from "@/lib/format";
@@ -13,6 +13,8 @@ import { ModelPicker } from "./ModelPicker";
 import { RunBlock, SystemMessage, UserMessage } from "./Timeline";
 import { AvatarStack, BotAvatar, IconButton, Spinner } from "./ui";
 import { VoiceMode } from "./Voice";
+import { BotEditor } from "./BotEditor";
+import type { Bot } from "@/lib/types";
 
 interface ThreadData {
   thread: Thread;
@@ -35,6 +37,7 @@ export function ChatView({ threadId }: { threadId: string }) {
   const [zoom, setZoom] = useState<string | null>(null);
   const [voice, setVoice] = useState(false);
   const [menu, setMenu] = useState(false);
+  const [editBot, setEditBot] = useState<Bot | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
 
@@ -207,7 +210,7 @@ export function ChatView({ threadId }: { threadId: string }) {
             <IconButton label="Mer" onClick={() => setMenu((m) => !m)}>
               <MoreHorizontal size={18} />
             </IconButton>
-            {menu && <ThreadMenu thread={thread} onClose={() => setMenu(false)} />}
+            {menu && <ThreadMenu thread={thread} onClose={() => setMenu(false)} onEditBot={setEditBot} />}
           </div>
         </header>
 
@@ -299,6 +302,8 @@ export function ChatView({ threadId }: { threadId: string }) {
         </div>
       )}
 
+      <BotEditor bot={editBot} open={!!editBot} onClose={() => setEditBot(null)} />
+
       {voice && (
         <VoiceMode
           bot={target}
@@ -312,10 +317,11 @@ export function ChatView({ threadId }: { threadId: string }) {
   );
 }
 
-function ThreadMenu({ thread, onClose }: { thread: Thread; onClose: () => void }) {
+function ThreadMenu({ thread, onClose, onEditBot }: { thread: Thread; onClose: () => void; onEditBot: (b: Bot) => void }) {
   const crew = useCrew();
   const router = useRouter();
   const notMembers = crew.bots.filter((b) => !thread.bot_ids.includes(b.id));
+  const members = thread.bot_ids.map((id) => crew.botById(id)).filter(Boolean) as Bot[];
   useEffect(() => {
     const t = setTimeout(() => document.addEventListener("click", onClose, { once: true }), 0);
     return () => clearTimeout(t);
@@ -330,6 +336,12 @@ function ThreadMenu({ thread, onClose }: { thread: Thread; onClose: () => void }
           if (title !== null) await api.patch(`/api/threads/${thread.id}`, { title });
         }}
       />
+      {members.map((b) => (
+        <MenuItem key={`new-${b.id}`} icon={<MessageSquarePlus size={14} />} label={`Ny chatt med ${b.name}`} onClick={() => router.push(`/?bot=${b.id}&new=1`)} />
+      ))}
+      {members.map((b) => (
+        <MenuItem key={`edit-${b.id}`} icon={<Settings2 size={14} />} label={`Redigera ${b.name}`} onClick={() => onEditBot(b)} />
+      ))}
       {notMembers.length > 0 && <div className="px-2.5 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-faint">Lägg till i chatten</div>}
       {notMembers.map((b) => (
         <MenuItem key={b.id} icon={<UserPlus size={14} />} label={b.name} onClick={() => api.patch(`/api/threads/${thread.id}`, { addBotId: b.id })} extra={<BotAvatar bot={b} size={18} />} />

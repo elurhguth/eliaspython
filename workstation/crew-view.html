@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crew – datorn</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0b0c0e; overflow: hidden; font: 13px ui-sans-serif, system-ui, sans-serif; color: #8b9098; }
+  #screen { position: absolute; inset: 0; }
+  #status { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: none; }
+  #status.show { display: block; }
+</style>
+</head>
+<body>
+<div id="screen"></div>
+<div id="status">Ansluter till datorn…</div>
+<script type="module">
+  // Minimal noVNC viewer for Crew: no toolbar, scales to fit, reconnects automatically.
+  import RFB from "./core/rfb.js";
+  const q = new URLSearchParams(location.search);
+  const path = (q.get("path") || "websockify").replace(/^\//, "");
+  const url = (location.protocol === "https:" ? "wss" : "ws") + "://" + location.host + "/" + path;
+  const status = document.getElementById("status");
+  let rfb;
+  function connect() {
+    status.classList.add("show");
+    rfb = new RFB(document.getElementById("screen"), url);
+    rfb.viewOnly = q.get("view_only") === "1";
+    rfb.scaleViewport = true;
+    rfb.resizeSession = false;
+    rfb.background = "#0b0c0e";
+    rfb.addEventListener("connect", () => status.classList.remove("show"));
+    rfb.addEventListener("disconnect", () => {
+      status.textContent = "Frånkopplad – försöker igen…";
+      status.classList.add("show");
+      setTimeout(connect, 1500);
+    });
+  }
+  connect();
+</script>
+</body>
+</html>

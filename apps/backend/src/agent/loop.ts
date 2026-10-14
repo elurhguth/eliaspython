@@ -5,6 +5,7 @@ import { publish } from "../events.js";
 import { notify } from "../push.js";
 import {
   acquireRunLock,
+  enqueueRun,
   isCancelled,
   refreshRunLock,
   releaseRunLock,
@@ -42,7 +43,13 @@ const TERMINAL = new Set(["done", "error", "cancelled"]);
 
 export async function processRun(runId: string) {
   const token = randomUUID();
-  if (!(await acquireRunLock(runId, token))) return; // someone else is on it
+  if (!(await acquireRunLock(runId, token))) {
+    // Someone else is on it. If it is waiting for a worker (e.g. an approval landed while the
+    // previous job was still releasing the lock), try again shortly so it is never stranded.
+    const run = await getRun(runId);
+    if (run?.status === "queued") await enqueueRun(runId, 3000);
+    return;
+  }
   const heartbeat = setInterval(() => refreshRunLock(runId, token).catch(() => {}), 30_000);
   try {
     await runLoop(runId);
@@ -67,8 +74,12 @@ function resolveModel(bot: BotRow, thread: ThreadRow) {
   return o ?? { provider: bot.provider, model: bot.model };
 }
 
-/** Does this bot have something new to respond to? */
+/** Does this bot have something new to respond to? (tool results, a human message, or a teammate's @mention) */
 function needsResponse(messages: MessageRow[], bot: BotRow, team: BotRow[]) {
+  return responseReason(messages, bot, team) !== null;
+}
+
+function responseReason(messages: MessageRow[], bot: BotRow, team: BotRow[]): "tool" | "human" | "mention" | null {
   let lastMine = -1;
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
@@ -78,15 +89,17 @@ function needsResponse(messages: MessageRow[], bot: BotRow, team: BotRow[]) {
     }
   }
   // Tool results always go back to the model.
-  if (lastMine >= 0 && messages[lastMine].role === "tool") return true;
+  if (lastMine >= 0 && messages[lastMine].role === "tool") return "tool";
   const after = messages.slice(lastMine + 1);
-  return after.some((m) => {
-    if (m.author_type === "user" || m.author_type === "system") return m.role === "user";
-    if (m.author_type === "bot" && m.bot_id !== bot.id && (m.role === "assistant" || m.role === "note")) {
-      return mentionedBots(textOf(m.content), team).some((b) => b.id === bot.id);
-    }
-    return false;
-  });
+  if (after.some((m) => (m.author_type === "user" || m.author_type === "system") && m.role === "user")) return "human";
+  const mentioned = after.some(
+    (m) =>
+      m.author_type === "bot" &&
+      m.bot_id !== bot.id &&
+      (m.role === "assistant" || m.role === "note") &&
+      mentionedBots(textOf(m.content), team).some((b) => b.id === bot.id),
+  );
+  return mentioned ? "mention" : null;
 }
 
 async function runLoop(runId: string) {
@@ -423,10 +436,11 @@ async function finish(run: RunRow, status: "done" | "error" | "cancelled", error
 
   if (status === "done") {
     await dispatchMentions(updated, finalText);
-    // A message may have slipped in between the last check and the status update.
+    // A human message may have slipped in between the last check and the status update.
+    // (Teammate mentions are handled by their own dispatchMentions, which respects the chain depth.)
     const team = await getBots();
     const messages = await loadThreadMessages(run.thread_id);
-    if (bot && needsResponse(messages, bot, team)) await ensureRun({ threadId: run.thread_id, botId: bot.id, trigger: "chat" });
+    if (bot && responseReason(messages, bot, team) === "human") await ensureRun({ threadId: run.thread_id, botId: bot.id, trigger: "chat" });
   }
 
   const started = updated.started_at ? new Date(updated.started_at).getTime() : Date.now();

@@ -12,15 +12,10 @@ type Tab = "live" | "steps" | "files";
 
 function vncUrl(viewOnly: boolean) {
   const p = new URLSearchParams({
-    autoconnect: "1",
-    reconnect: "1",
-    reconnect_delay: "1500",
-    resize: "scale",
     view_only: viewOnly ? "1" : "0",
     path: "vnc/websockify",
-    show_dot: "1",
   });
-  return `/vnc/vnc.html?${p}`;
+  return `/vnc/crew-view.html?${p}`;
 }
 
 export function ComputerPanel({

@@ -52,6 +52,12 @@ export async function listServers(botId?: string): Promise<McpServerRow[]> {
   return rows.filter((r) => !botId || !r.bot_ids || r.bot_ids.length === 0 || r.bot_ids.includes(botId));
 }
 
+function cleanSchema(schema: any): Record<string, unknown> {
+  if (!schema || typeof schema !== "object" || schema.type !== "object") return { type: "object", properties: {} };
+  const { $schema: _ignored, ...rest } = schema;
+  return rest;
+}
+
 const toolCache = new Map<string, { at: number; tools: McpTool[] }>();
 
 export async function listServerTools(s: McpServerRow): Promise<McpTool[]> {
@@ -68,7 +74,7 @@ export async function listServerTools(s: McpServerRow): Promise<McpTool[]> {
     server: s,
     name: t.name,
     description: t.description ?? "",
-    inputSchema: t.inputSchema && typeof t.inputSchema === "object" ? t.inputSchema : { type: "object", properties: {} },
+    inputSchema: cleanSchema(t.inputSchema),
   }));
   toolCache.set(cacheKey, { at: Date.now(), tools });
   return tools;
