@@ -30,6 +30,8 @@ export function redact<T>(value: T): T {
       if (key && SECRET_KEY.test(key) && v.length > 0) return "••••";
       return redactString(v);
     }
+    if (v instanceof Date) return v.toISOString();
+    if (Buffer.isBuffer(v)) return "[binary]";
     if (v && typeof v === "object") {
       if (seen.has(v)) return "[circular]";
       seen.add(v);

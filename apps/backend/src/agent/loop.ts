@@ -22,7 +22,6 @@ import {
   getRun,
   getThread,
   insertMessage,
-  mentionedBots,
   publishRun,
   publishThread,
   textOf,
@@ -31,6 +30,7 @@ import {
 import type { ApprovalRow, Block, BotRow, MessageRow, RunRow, ThreadRow } from "../types.js";
 import { ws } from "../workstation.js";
 import { buildHistory, loadThreadMessages } from "./history.js";
+import { needsResponse, responseReason } from "./turns.js";
 import { getPolicy } from "./policy.js";
 import { systemPrompt } from "./prompt.js";
 import { getProvider } from "./providers/index.js";
@@ -72,34 +72,6 @@ async function setStatus(runId: string, status: RunRow["status"]) {
 function resolveModel(bot: BotRow, thread: ThreadRow) {
   const o = (thread.model_override as Record<string, { provider: string; model: string }> | null)?.[bot.id];
   return o ?? { provider: bot.provider, model: bot.model };
-}
-
-/** Does this bot have something new to respond to? (tool results, a human message, or a teammate's @mention) */
-function needsResponse(messages: MessageRow[], bot: BotRow, team: BotRow[]) {
-  return responseReason(messages, bot, team) !== null;
-}
-
-function responseReason(messages: MessageRow[], bot: BotRow, team: BotRow[]): "tool" | "human" | "mention" | null {
-  let lastMine = -1;
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const m = messages[i];
-    if (m.author_type === "bot" && m.bot_id === bot.id && (m.role === "assistant" || m.role === "tool")) {
-      lastMine = i;
-      break;
-    }
-  }
-  // Tool results always go back to the model.
-  if (lastMine >= 0 && messages[lastMine].role === "tool") return "tool";
-  const after = messages.slice(lastMine + 1);
-  if (after.some((m) => (m.author_type === "user" || m.author_type === "system") && m.role === "user")) return "human";
-  const mentioned = after.some(
-    (m) =>
-      m.author_type === "bot" &&
-      m.bot_id !== bot.id &&
-      (m.role === "assistant" || m.role === "note") &&
-      mentionedBots(textOf(m.content), team).some((b) => b.id === bot.id),
-  );
-  return mentioned ? "mention" : null;
 }
 
 async function runLoop(runId: string) {
@@ -148,6 +120,7 @@ async function runLoop(runId: string) {
     },
   };
 
+  let seenSeq: bigint | undefined;
   for (;;) {
     if (await isCancelled(runId)) return finish(run, "cancelled");
     const messages = await loadThreadMessages(thread.id);
@@ -161,7 +134,7 @@ async function runLoop(runId: string) {
       continue;
     }
 
-    if (!needsResponse(messages, bot, team)) return finish(run, "done");
+    if (!needsResponse(messages, bot, team, seenSeq)) return finish(run, "done", undefined, seenSeq);
     run = (await getRun(runId))!;
     if (run.step_count >= config.maxStepsPerRun) {
       await insertMessage({
@@ -177,6 +150,7 @@ async function runLoop(runId: string) {
 
     const members = await threadBots(thread.id);
     const history = buildHistory(messages, bot, botsById, members.length > 1);
+    seenSeq = messages.length ? BigInt(messages[messages.length - 1].seq) : undefined;
     const system = await systemPrompt(bot, team, thread, members);
 
     // Stream text deltas to the UI, batched.
@@ -421,7 +395,7 @@ async function delegate(run: RunRow, from: BotRow, thread: ThreadRow, slug: stri
   return `Uppgiften är överlämnad till ${target.name} (@${target.slug}). Hen svarar i tråden och @-nämner dig om något behövs. Avsluta din tur om du inte har mer att göra.`;
 }
 
-async function finish(run: RunRow, status: "done" | "error" | "cancelled", error?: string) {
+async function finish(run: RunRow, status: "done" | "error" | "cancelled", error?: string, seenSeq?: bigint) {
   const [last] = await sql<MessageRow[]>`
     select * from messages where run_id = ${run.id} and role = 'assistant' order by seq desc limit 1`;
   const finalText = last ? textOf(last.content) : "";
@@ -440,7 +414,7 @@ async function finish(run: RunRow, status: "done" | "error" | "cancelled", error
     // (Teammate mentions are handled by their own dispatchMentions, which respects the chain depth.)
     const team = await getBots();
     const messages = await loadThreadMessages(run.thread_id);
-    if (bot && responseReason(messages, bot, team) === "human") await ensureRun({ threadId: run.thread_id, botId: bot.id, trigger: "chat" });
+    if (bot && responseReason(messages, bot, team, seenSeq) === "human") await ensureRun({ threadId: run.thread_id, botId: bot.id, trigger: "chat" });
   }
 
   const started = updated.started_at ? new Date(updated.started_at).getTime() : Date.now();

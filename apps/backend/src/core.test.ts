@@ -23,6 +23,8 @@ describe("redaction", () => {
     expect(r.nested.api_key).toBe("••••");
     expect(r.input_tokens).toBe("1234");
     expect(r.text).toBe("hej");
+    const d = new Date("2026-10-14T20:00:00Z");
+    expect((redact({ at: d }) as any).at).toBe("2026-10-14T20:00:00.000Z");
   });
 });
 
@@ -130,5 +132,43 @@ describe("ssrf guard", () => {
     for (const ip of ["127.0.0.1", "10.1.2.3", "172.18.0.4", "192.168.1.10", "169.254.169.254", "100.64.0.1", "::1", "fd00::1", "::ffff:127.0.0.1", "0.0.0.0"])
       expect(isPrivateAddress(ip), ip).toBe(true);
     for (const ip of ["1.1.1.1", "140.82.121.4", "2606:4700::1111"]) expect(isPrivateAddress(ip), ip).toBe(false);
+  });
+});
+
+describe("turn taking", async () => {
+  const { responseReason } = await import("./agent/turns.js");
+  const vera = bot("v", "Vera");
+  const nils = bot("n", "Nils");
+  const team = [vera, nils];
+  const m = (seqN: number, p: Partial<MessageRow>) => msg({ ...p, seq: String(seqN) });
+
+  it("answers tool results and new human messages", () => {
+    const base = [m(1, { author_type: "user", role: "user", content: [{ type: "text", text: "hej" }] })];
+    expect(responseReason(base, vera, team)).toBe("human");
+    const withTool = [...base, m(2, { author_type: "bot", bot_id: "v", role: "assistant", content: [{ type: "tool_call", id: "a", name: "x", input: {} }] }), m(3, { author_type: "bot", bot_id: "v", role: "tool", content: [] })];
+    expect(responseReason(withTool, vera, team)).toBe("tool");
+    const answered = [...base, m(2, { author_type: "bot", bot_id: "v", role: "assistant", content: [{ type: "text", text: "svar" }] })];
+    expect(responseReason(answered, vera, team)).toBeNull();
+  });
+
+  it("catches a message that arrived while the model was thinking", () => {
+    const msgs = [
+      m(1, { author_type: "user", role: "user", content: [{ type: "text", text: "uppgift 1" }] }),
+      m(2, { author_type: "user", role: "user", content: [{ type: "text", text: "uppgift 2 (skickad under tiden)" }] }),
+      m(3, { author_type: "bot", bot_id: "v", role: "assistant", content: [{ type: "text", text: "klar med 1" }] }),
+    ];
+    expect(responseReason(msgs, vera, team)).toBeNull(); // without knowing what the model saw…
+    expect(responseReason(msgs, vera, team, 1n)).toBe("human"); // …but it only saw seq 1
+    expect(responseReason(msgs, vera, team, 2n)).toBeNull();
+  });
+
+  it("wakes on teammate @mentions only", () => {
+    const msgs = [
+      m(1, { author_type: "bot", bot_id: "v", role: "assistant", content: [{ type: "text", text: "klart" }] }),
+      m(2, { author_type: "bot", bot_id: "n", role: "assistant", content: [{ type: "text", text: "@vera jag behöver din hjälp" }] }),
+    ];
+    expect(responseReason(msgs, vera, team)).toBe("mention");
+    const noMention = [msgs[0], m(2, { author_type: "bot", bot_id: "n", role: "assistant", content: [{ type: "text", text: "jag är klar" }] })];
+    expect(responseReason(noMention, vera, team)).toBeNull();
   });
 });
