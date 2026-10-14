@@ -1,0 +1,36 @@
+{
+  "name": "@crew/backend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p .",
+    "typecheck": "tsc -p . --noEmit",
+    "dev:server": "tsx watch src/server.ts",
+    "dev:worker": "tsx watch src/worker.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.134.0",
+    "@fastify/cookie": "^11.0.0",
+    "@fastify/multipart": "^10.0.0",
+    "@modelcontextprotocol/sdk": "^1.32.0",
+    "@node-rs/argon2": "^2.0.2",
+    "@simplewebauthn/server": "^14.0.0",
+    "bullmq": "^5.60.0",
+    "cron-parser": "^5.10.2",
+    "fastify": "^5.6.0",
+    "ioredis": "^5.4.0",
+    "openai": "^6.3.0",
+    "postgres": "^3.4.7",
+    "web-push": "^3.6.7",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/web-push": "^3.6.4",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  }
+}

@@ -1,0 +1,121 @@
+# Crew – self-hosted team of always-on AI bots.
+#   cp .env.example .env   # fill in passwords + at least one API key
+#   docker compose up -d --build
+name: crew
+
+x-backend: &backend
+  build:
+    context: .
+    dockerfile: apps/backend/Dockerfile
+  image: crew-backend:latest
+  restart: unless-stopped
+  env_file: .env
+  environment:
+    DATABASE_URL: postgres://crew:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/crew
+    REDIS_URL: redis://redis:6379
+    WORKSTATION_URL: http://workstation:7000
+    SEARXNG_URL: ${SEARXNG_URL:-http://searxng:8080}
+    DATA_DIR: /data
+  volumes:
+    - crew-data:/data
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  networks: [default, data]
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    image: crew-web:latest
+    restart: unless-stopped
+    environment:
+      CREW_SITE_ADDRESS: ${CREW_SITE_ADDRESS:-:80}
+    ports:
+      - "${HTTP_PORT:-8080}:80"
+      - "${HTTPS_PORT:-8443}:443"
+    volumes:
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on: [server]
+
+  server:
+    <<: *backend
+    command: ["node", "dist/server.js"]
+
+  worker:
+    <<: *backend
+    command: ["node", "dist/worker.js"]
+
+  # The bots' shared computer: Chromium + files + terminal (+ noVNC live view).
+  workstation:
+    build:
+      context: .
+      dockerfile: workstation/Dockerfile
+    image: crew-workstation:latest
+    restart: unless-stopped
+    shm_size: 1gb
+    environment:
+      WORKSTATION_TOKEN: ${WORKSTATION_TOKEN:?Set WORKSTATION_TOKEN in .env}
+      TZ: ${TZ:-Europe/Stockholm}
+      BROWSER_LANG: ${BROWSER_LANG:-sv-SE}
+      SCREEN_WIDTH: ${SCREEN_WIDTH:-1280}
+      SCREEN_HEIGHT: ${SCREEN_HEIGHT:-800}
+    volumes:
+      - workstation-home:/home/crew
+    # Note: deliberately NOT on the "data" network – the bots' computer cannot reach Postgres/Redis.
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: crew
+      POSTGRES_DB: crew
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crew -d crew"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [data]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [data]
+
+  searxng:
+    image: searxng/searxng:latest
+    restart: unless-stopped
+    environment:
+      SEARXNG_SECRET: ${SEARXNG_SECRET:-change-me}
+      # Bind IPv4 (works on hosts/NAS without IPv6)
+      GRANIAN_HOST: 0.0.0.0
+    volumes:
+      - ./deploy/searxng/settings.yml:/etc/searxng/settings.yml:ro
+
+networks:
+  default: {}
+  data:
+    internal: true
+
+volumes:
+  crew-data:
+  workstation-home:
+  postgres-data:
+  redis-data:
+  caddy-data:
+  caddy-config:

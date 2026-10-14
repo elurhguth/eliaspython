@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.next/
+out/
+.env
+*.log
+certs/*
+!certs/.gitkeep
+!certs/README.md
+.data/
+*.tsbuildinfo

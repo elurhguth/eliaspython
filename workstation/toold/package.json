@@ -1,0 +1,20 @@
+{
+  "name": "@crew/toold",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p .",
+    "typecheck": "tsc -p . --noEmit",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "fastify": "^5.6.0",
+    "playwright-core": "^1.56.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.9.0"
+  }
+}

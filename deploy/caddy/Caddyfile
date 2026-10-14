@@ -1,0 +1,39 @@
+{
+	admin off
+}
+
+{$CREW_SITE_ADDRESS::80} {
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy same-origin
+		Permissions-Policy "camera=(), geolocation=()"
+		-Server
+	}
+
+	# API (incl. Server-Sent Events – flush immediately, no compression).
+	handle /api/* {
+		reverse_proxy server:4000 {
+			flush_interval -1
+		}
+	}
+
+	# Live view / takeover of the shared computer (noVNC). Only for logged-in users.
+	handle_path /vnc/* {
+		forward_auth server:4000 {
+			uri /api/auth/check
+		}
+		reverse_proxy workstation:6080
+	}
+
+	# The web app (static Next.js export, PWA).
+	handle {
+		encode zstd gzip
+		root * /srv
+		@sw path /sw.js /manifest.webmanifest
+		header @sw Cache-Control "no-cache"
+		@assets path /_next/static/*
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+		try_files {path} {path}.html {path}/index.html /index.html
+		file_server
+	}
+}

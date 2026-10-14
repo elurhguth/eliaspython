@@ -1,0 +1,13 @@
+{
+  "name": "crew",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Crew – a self-hosted team of always-on AI bots sharing one cloud computer",
+  "workspaces": ["apps/backend", "apps/web", "workstation/toold"],
+  "scripts": {
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present"
+  },
+  "engines": { "node": ">=22" }
+}
