@@ -65,6 +65,8 @@ docker compose up -d --build
 
 > Utan modellnyckel körs botarna i **demoläge**: ingen AI, men du kan testa datorn, godkännanden, handoff, minne och routines med kommandon som *"öppna example.com och ta en skärmdump"*, *"kör uname -a"*, *"kom ihåg att jag dricker te"*, *"skicka mejlet på example.com"* eller *"logga in på example.com"*.
 
+Lägger du till en API-nyckel senare (`docker compose up -d` efter ändringen i `.env`) flyttas startteamet automatiskt från demo till den riktiga modellen – så länge du inte själv har ändrat någon bots modell.
+
 Uppdatera senare: `git pull && docker compose up -d --build`.
 
 ## Konfiguration (.env)

@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Archive, MessageSquarePlus, Monitor, MoreHorizontal, Pencil, Settings2, Trash2, UserPlus } from "lucide-react";
+import { Archive, MessageSquarePlus, Monitor, MoreHorizontal, Pencil, Plug, Settings2, Trash2, UserPlus } from "lucide-react";
 import { api } from "@/lib/api";
 import { useCrew, useCrewEvent } from "@/lib/store";
 import { cx } from "@/lib/format";
@@ -346,6 +346,7 @@ function ThreadMenu({ thread, onClose, onEditBot }: { thread: Thread; onClose: (
       {notMembers.map((b) => (
         <MenuItem key={b.id} icon={<UserPlus size={14} />} label={b.name} onClick={() => api.patch(`/api/threads/${thread.id}`, { addBotId: b.id })} extra={<BotAvatar bot={b} size={18} />} />
       ))}
+      <MenuItem icon={<Plug size={14} />} label="Koppla källa / verktyg (MCP)" onClick={() => router.push("/settings#mcp")} />
       <div className="my-1 border-t border-line" />
       <MenuItem icon={<Archive size={14} />} label="Arkivera" onClick={async () => {
         await api.patch(`/api/threads/${thread.id}`, { archived: true });

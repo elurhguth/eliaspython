@@ -10,9 +10,10 @@ import { useCrew } from "@/lib/store";
 import { currentSubscription, disablePush, enablePush, pushSupported } from "@/lib/push";
 import { dateTime } from "@/lib/format";
 
-function Section({ icon, title, children, description }: { icon: React.ReactNode; title: string; description?: string; children: React.ReactNode }) {
+function Section({ icon, title, children, description, id }: { icon: React.ReactNode; title: string; description?: string; children: React.ReactNode; id?: string }) {
   return (
-    <Card className="p-5">
+    <Card className="scroll-mt-6 p-5">
+      {id && <span id={id} />}
       <div className="mb-4 flex items-start gap-3">
         <div className="mt-0.5 text-ember">{icon}</div>
         <div>
@@ -156,6 +157,7 @@ function Mcp() {
   }, [load]);
   return (
     <Section
+      id="mcp"
       icon={<Plug size={18} />}
       title="Källor & verktyg (MCP)"
       description="Koppla MCP-servrar för extra verktyg och datakällor. Lokala (stdio) servrar körs isolerat på botarnas dator. Du kan lägga till flera av samma typ, t.ex. två konton."
